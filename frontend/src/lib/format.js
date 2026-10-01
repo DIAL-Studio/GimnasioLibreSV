@@ -6,6 +6,11 @@ export const todayISO = () => {
 }
 export const isoOf = d =>
   d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0')
+// Day keys ('YYYY-MM-DD') name a local calendar day, not an instant: `new Date(iso)` parses
+// a bare date at UTC midnight by spec, which is the previous evening — and the previous
+// *day* — west of Greenwich. Parsing at local noon keeps the key on the day it names
+// everywhere, matching how todayISO/isoOf build it from local date parts.
+export const fromISO = iso => new Date(iso + 'T12:00:00')
 
 export const DAYN = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday']
 export const DAYS = ['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa']
@@ -13,7 +18,7 @@ export const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', '
 export const MONTHS_LONG = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December']
 
 export function fmtDate(iso, long) {
-  const d = new Date(iso + 'T12:00:00')
+  const d = fromISO(iso)
   return d.toLocaleDateString(dateLocale(), long ? { weekday: 'short', day: 'numeric', month: 'short' } : { day: 'numeric', month: 'short' })
 }
 export function fmtDur(ms) {
@@ -33,7 +38,7 @@ export const fmtVol = (v, unit) => fmtNum(v) + ' ' + unit
 export const exCount = n => t(n === 1 ? '{0} exercise' : '{0} exercises', n)
 
 export function weekKey(d) {
-  const dt = new Date(d + 'T12:00:00')
+  const dt = fromISO(d)
   const day = (dt.getDay() + 6) % 7
   dt.setDate(dt.getDate() - day + 3)
   const jan4 = new Date(dt.getFullYear(), 0, 4)

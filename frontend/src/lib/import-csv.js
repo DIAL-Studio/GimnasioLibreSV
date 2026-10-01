@@ -474,7 +474,7 @@ export function parseBodyweight(text, { unit = 'kg' } = {}) {
       const when = parseWhen(String(rows[i][dCol] ?? ''))
       const w = num(rows[i][wCol])
       if (!when || !w) continue
-      out.set(when.d, { w, t: new Date(when.d).getTime() + (when.t ?? 0) })
+      out.set(when.d, { w, t: new Date(when.d + 'T00:00:00').getTime() + (when.t ?? 0) })
     }
   }
 
@@ -486,7 +486,7 @@ export function parseBodyweight(text, { unit = 'kg' } = {}) {
   const dates = [...out.keys()].sort()
   return {
     kind: 'bodyweight', source: 'Apple Health',
-    bodyweight: dates.map(d => ({ d, w: conv(out.get(d).w), t: out.get(d).t || new Date(d).getTime() })),
+    bodyweight: dates.map(d => ({ d, w: conv(out.get(d).w), t: out.get(d).t || new Date(d + 'T00:00:00').getTime() })),
     fileUnit, converted, from: dates[0], to: dates[dates.length - 1],
   }
 }

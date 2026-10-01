@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { useStore } from '../store/useStore.js'
 import { EXIDX } from '../lib/exercises.js'
 import { lastBW, streakWeeks, setLabel, modeOf, effortOf } from '../lib/history.js'
-import { fmtNum, fmtDate, fmtVol, todayISO, weekKey } from '../lib/format.js'
+import { fmtNum, fmtDate, fmtVol, todayISO, fromISO, weekKey } from '../lib/format.js'
 import { t } from '../lib/i18n.js'
 import { bwSheet, goalSheet, calendarSheet, workoutDetailSheet, WorkoutRow, bwDeltaColor } from '../sheets.jsx'
 import LineChart from '../components/LineChart.jsx'
@@ -28,7 +28,7 @@ function MuscleBalance({ S }) {
   const inWin = S.workouts.filter(w =>
     win === 0 ? true
       : win === 7 ? weekKey(w.d) === weekKey(todayISO())
-        : (w.start || new Date(w.d).getTime()) > now - win * 86400000)
+        : (w.start || fromISO(w.d).getTime()) > now - win * 86400000)
   // Counting only the sets taken near failure turns the map from "where did the volume go"
   // into "where did the stimulus go" — a muscle can lead on sets and still never be trained
   // hard. Offered only when the window holds ratings at all, since with none the hard map
@@ -141,9 +141,9 @@ export default function Stats() {
   const kind = displayScale(S)
   const hd = scaleName(kind)
 
-  const bwPts = S.bodyweight.filter(b => range === 0 || (b.t || new Date(b.d).getTime()) > now - range * 86400000)
-    .map(b => ({ t: b.t || new Date(b.d).getTime(), y: b.w, d: b.d }))
-  const bw30 = S.bodyweight.filter(b => (b.t || new Date(b.d).getTime()) > now - 30 * 86400000)
+  const bwPts = S.bodyweight.filter(b => range === 0 || (b.t || fromISO(b.d).getTime()) > now - range * 86400000)
+    .map(b => ({ t: b.t || fromISO(b.d).getTime(), y: b.w, d: b.d }))
+  const bw30 = S.bodyweight.filter(b => (b.t || fromISO(b.d).getTime()) > now - 30 * 86400000)
   const bwDelta30 = bw30.length > 1 ? bw30[bw30.length - 1].w - bw30[0].w : null
   const monthW = S.workouts.filter(w => w.d.slice(0, 7) === todayISO().slice(0, 7)).length
 

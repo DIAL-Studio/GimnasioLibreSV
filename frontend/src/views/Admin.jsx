@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { useStore } from '../store/useStore.js'
 import { useUI } from '../store/useUI.js'
 import { api } from '../lib/api.js'
-import { fmtDate, fmtNum, fmtVol, fmtDur } from '../lib/format.js'
+import { fmtDate, fmtNum, fmtVol, fmtDur, isoOf } from '../lib/format.js'
 import { workoutVolume, setsDone } from '../lib/history.js'
 import { confirmSheet } from '../sheets.jsx'
 import Icon from '../components/Icon.jsx'
@@ -40,7 +40,7 @@ function UserDetail({ id, onChanged, close }) {
       {u.admin && <span className="tag acc">admin</span>}
       {u.disabled && <span className="tag" style={{ color: 'var(--red)' }}>disabled</span>}
       {u.invitedBy && <span className="tag">invite {u.invitedBy}</span>}
-      <span className="tag">joined {u.created ? fmtDate(u.created.slice(0, 10)) : '—'}</span>
+      <span className="tag">joined {u.created ? fmtDate(isoOf(new Date(u.created))) : '—'}</span>
     </div>
     <div className="tiles" style={{ textAlign: 'left' }}>
       <div className="tile"><div className="l">Workouts</div><div className="v" style={{ fontSize: '1.1rem' }}>{d.workouts.length}</div></div>
