@@ -43,13 +43,15 @@ Crea una carpeta por gimnasio (aquí `gym1`):
 
 ```bash
 mkdir -p /srv/gimnasios && cd /srv/gimnasios
-git clone https://github.com/DIAL-Studio/GimnasioLibreSV.git gym1
+git clone https://github.com/DIAL-Studio/GimnasioLibreSV-private.git gym1
 cd gym1
 ```
 
-> Si el repositorio es privado, clona con un token de GitHub
-> (`git clone https://TU_TOKEN@github.com/DIAL-Studio/GimnasioLibreSV.git gym1`)
-> o configura una deploy key.
+> **El repositorio es privado:** el clonado anónimo no funciona. Clónalo con un
+> token de GitHub
+> (`git clone https://TU_TOKEN@github.com/DIAL-Studio/GimnasioLibreSV-private.git gym1`)
+> o configura una deploy key. Para el token basta uno *fine-grained* de solo
+> lectura (permiso **Contents: Read-only**) con acceso a este repositorio.
 
 ## 3. Configurar `.env`
 
@@ -147,7 +149,8 @@ del primer gimnasio) les da HTTPS.
 
 ```bash
 cd /srv/gimnasios
-git clone https://github.com/DIAL-Studio/GimnasioLibreSV.git gym2
+# Repo privado: usa el token o la deploy key de la sección 2
+git clone https://github.com/DIAL-Studio/GimnasioLibreSV-private.git gym2
 cd gym2
 cp .env.example .env
 nano .env
