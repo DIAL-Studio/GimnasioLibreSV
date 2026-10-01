@@ -217,10 +217,12 @@ export default function Settings() {
         subtitle={t('to install openGym as a full-screen app.') + ' ' + (user ? t('Your data syncs with your profile — sign in anywhere to see it.') : t('Guest data stays on this device — export a backup now and then!'))} />
     </Section>}
 
-    <div className="dim small" style={{ textAlign: 'center', marginTop: 4, lineHeight: 1.6 }}>
-      openGym · {t('free & open source (AGPL v3)')}<br />
-      <a href="https://github.com/DuarteSantos8/openGym" target="_blank" rel="noopener">source code</a> · exercise data: hasaneyldrm/exercises-dataset (CC)
-    </div>
+    {/* The AGPL and the dataset's MIT license both require their notices to stay reachable —
+        just not in the middle of Settings, where a white-label gym's members would read
+        openGym branding. They live one tap away behind this row. */}
+    <Section title={t('About')}>
+      <Row icon="clipboard" iconTint="var(--grey)" title={t('Licenses & credits')} accessory="chevron" onClick={licensesSheet} />
+    </Section>
   </div>
 }
 
@@ -255,6 +257,29 @@ function effortHelpSheet() {
     <div className="dim small" style={{ lineHeight: 1.5, display: 'grid', gap: 8 }}>
       <div>{t('RIR counts the reps you left; RPE reads the same effort off a 10-point scale — so RPE ≈ 10 − RIR. Pick the one you already think in.')}</div>
       <div>{t('The highlighted row is where most working sets land. Sets you have already logged keep their own scale, and nothing else reads the value — progression and estimated 1RM are unaffected.')}</div>
+    </div>
+    <div style={{ height: 8 }} />
+  </>)
+}
+
+// The notices AGPL §13 and the dataset's MIT license require, kept out of the main Settings
+// view (white-label) but reachable in one tap. §13 asks for the source of the version actually
+// running — this fork, not upstream — so the link goes to our repo while openGym keeps its
+// credit. The footer this replaces also mislabelled the dataset's media as "(CC)": the data and
+// instructions are MIT, the images and animations are © Gym visual under their own license.
+const DATASET_REPO = 'https://github.com/hasaneyldrm/exercises-dataset'
+function licensesSheet() {
+  useUI.getState().openSheet(() => <>
+    <h3>{t('Licenses & credits')}</h3>
+    <div className="muted small" style={{ lineHeight: 1.5, display: 'grid', gap: 12 }}>
+      <div>
+        {t('Based on openGym (AGPL v3) — the source code of this version is at')}<br />
+        <a href={REPO} target="_blank" rel="noopener">DIAL-Studio/GimnasioLibreSV</a>
+      </div>
+      <div>
+        <a href={DATASET_REPO} target="_blank" rel="noopener">hasaneyldrm/exercises-dataset</a><br />
+        {t('Exercise data and instructions under MIT; images and animations © Gym visual.')}
+      </div>
     </div>
     <div style={{ height: 8 }} />
   </>)
