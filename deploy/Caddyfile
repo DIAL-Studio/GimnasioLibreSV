@@ -1,0 +1,41 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# GimnasioLibreSV — TLS + reverse proxy with Caddy (automatic Let's Encrypt).
+#
+# Caddy is the only public entry point (ports 80/443). It reaches each gym's
+# `web` container over the shared Docker network `gimnasiolibre-edge`, by the
+# alias `<WEB_ALIAS>-web` (attached by docker-compose.prod.yml; default `gym-web`).
+#
+# Uncomment one block per gym and replace the domain. Then reload:
+#   docker compose -f docker-compose.yml -f docker-compose.prod.yml restart caddy
+#
+# ── Single gym ───────────────────────────────────────────────────────────────
+#
+# gym1.example.com {
+# 	reverse_proxy gym-web:80
+# }
+#
+# ── Several gyms on one VPS ──────────────────────────────────────────────────
+#
+# One stack per gym (own directory, own ./data, own .env with a unique
+# COMPOSE_PROJECT_NAME and WEB_ALIAS). Only ONE stack runs Caddy; the others
+# start just their services. Example layout:
+#
+#   /srv/gimnasios/gym1/.env   COMPOSE_PROJECT_NAME=gym1   WEB_ALIAS=gym1   ← runs Caddy
+#   /srv/gimnasios/gym2/.env   COMPOSE_PROJECT_NAME=gym2   WEB_ALIAS=gym2
+#
+#   gym1.example.com {
+#   	reverse_proxy gym1-web:80
+#   }
+#   gym2.example.com {
+#   	reverse_proxy gym2-web:80
+#   }
+#
+# Caddy issues and renews each certificate on its own; the first request to a
+# new domain can take a few seconds while it does. Certificates live in the
+# `caddy_data` volume, so they survive restarts and upgrades.
+# ─────────────────────────────────────────────────────────────────────────────
+
+# Uncomment and edit — `gym1.example.com` is a placeholder, not a real site:
+# gym1.example.com {
+# 	reverse_proxy gym-web:80
+# }

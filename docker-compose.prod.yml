@@ -1,0 +1,71 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# Production overlay for GimnasioLibreSV — Caddy TLS in front of the stack.
+#
+# Usage (from the stack directory):
+#   docker network create gimnasiolibre-edge        # once per VPS
+#   # edit deploy/Caddyfile with your domain(s)
+#   docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build
+#
+# What it changes:
+#   • caddy — public entry point, ports 80/443, automatic HTTPS (Let's Encrypt)
+#   • web   — no longer published publicly; bound to 127.0.0.1 for local debugging
+#   • api/web/caddy — log rotation + restart policies
+#
+# Multi-gym: every stack joins the shared `gimnasiolibre-edge` network with a
+# unique alias (WEB_ALIAS) and project name (COMPOSE_PROJECT_NAME); only one
+# stack runs Caddy. See docs/DEPLOY_VPS.md.
+# ─────────────────────────────────────────────────────────────────────────────
+
+services:
+  api:
+    restart: unless-stopped
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  web:
+    restart: unless-stopped
+    # Replace the base file's public binding with a localhost-only one (Caddy is
+    # the public entry point). `!override` prevents compose from merging both.
+    ports: !override
+      - "127.0.0.1:${WEB_PORT:-8080}:80"
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+    networks:
+      default: {}
+      edge:
+        aliases:
+          - "${WEB_ALIAS:-gym}-web"
+
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"   # HTTP/3
+    volumes:
+      - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data      # certificates — persisted, do not delete
+      - caddy_config:/config
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+    networks:
+      - edge
+
+networks:
+  edge:
+    external: true
+    name: gimnasiolibre-edge
+
+volumes:
+  caddy_data:
+  caddy_config:
