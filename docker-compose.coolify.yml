@@ -1,0 +1,102 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# Coolify-ready compose for GimnasioLibreSV.
+#
+# Use this file when the VPS runs Coolify (self-hosted PaaS: Docker + Traefik +
+# automatic TLS). Coolify's "Docker Compose" build pack reads this file, writes
+# a runtime .env and interpolates every ${VAR} below — so there is no env_file:
+# each variable is declared explicitly and editable from the Coolify UI.
+#
+# Public entry point: Coolify's Traefik routes your domain to the `web` service
+# on port 80. Do NOT publish `ports:` while a domain is attached (it bypasses
+# the proxy and causes 504s) and do NOT use docker-compose.prod.yml /
+# deploy/Caddyfile here — that Caddy would fight Traefik for ports 80/443.
+#
+# Data lives in named volumes (Coolify-safe, no relative bind mounts):
+#   data · media_img · media_gif  — back them up; see docs/DEPLOY_COOLIFY.md.
+# ─────────────────────────────────────────────────────────────────────────────
+
+services:
+  # One-time: download the exercise images + GIFs into the media volumes (skipped if
+  # already there). ~140 MB, from github.com/hasaneyldrm/exercises-dataset. The dataset's
+  # code and instructions are MIT-licensed, but its images/animations are © Gym visual and
+  # require their own license for redistribution — see NOTICE.md and scripts/fetch-media.sh.
+  media:
+    image: alpine/git
+    volumes:
+      - media_img:/out/img
+      - media_gif:/out/gif
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        if [ -z "$$(ls -A /out/img 2>/dev/null)" ]; then
+          echo "↓ Downloading exercise media (~140 MB, one time)…"
+          git clone --depth 1 https://github.com/hasaneyldrm/exercises-dataset /tmp/ds
+          cp /tmp/ds/images/*.jpg /out/img/ && cp /tmp/ds/videos/*.gif /out/gif/
+          echo "✓ Exercise media ready ($$(ls /out/img | wc -l) images)."
+        else
+          echo "✓ Exercise media already present — skipping download."
+        fi
+    restart: "no"
+
+  # Passkey auth + per-user data (Node, no framework).
+  # Built from source (api/Dockerfile) — this fork is not published on ghcr.io.
+  # RP_ID/ORIGIN/RP_NAME are set in the Coolify UI (Environment Variables); the
+  # defaults here keep `docker compose config` parseable with no .env present.
+  api:
+    build: ./api
+    restart: unless-stopped
+    environment:
+      - PORT=3000            # internal port (nginx proxies here) — do not change
+      - DATA_DIR=/data
+      - RP_ID=${RP_ID:-localhost}
+      - ORIGIN=${ORIGIN:-http://localhost:8080}
+      - RP_NAME=${RP_NAME:-GimnasioLibreSV}
+      - ADMIN_UIDS=${ADMIN_UIDS:-}
+      - INVITE_ONLY=${INVITE_ONLY:-}
+      - SESSION_DAYS=${SESSION_DAYS:-90}
+      - VAPID_SUBJECT=${VAPID_SUBJECT:-}
+    volumes:
+      - data:/data         # users, passkeys, per-user state, session secret — BACK THIS UP
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000/api/health').then(r => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # Builds the React frontend (multi-stage, root Dockerfile) and serves it, proxying /api → api
+  # and the exercise media from the shared volumes. Single origin for passkeys.
+  web:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    depends_on:
+      media:
+        condition: service_completed_successfully
+      api:
+        condition: service_healthy
+    # Coolify's Traefik routes the domain to this service on port 80.
+    # Do NOT publish ports while a domain is attached (504s). HTTP/IP fallback
+    # only, when no TLS is available (no passkeys): uncomment, redeploy, and
+    # open http://<VPS_IP>:8080.
+    # ports:
+    #   - "${WEB_PORT:-8080}:80"
+    volumes:
+      - media_img:/usr/share/nginx/html/img:ro
+      - media_gif:/usr/share/nginx/html/gif:ro
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+volumes:
+  data:
+  media_img:
+  media_gif:

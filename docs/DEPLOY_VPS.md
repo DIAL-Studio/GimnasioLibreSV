@@ -8,6 +8,10 @@ Hostinger con Ubuntu, pero sirve para cualquier proveedor con Docker.
 > **Necesitas:** un VPS con Ubuntu 22.04/24.04, un dominio que puedas apuntar a
 > su IP y acceso SSH.
 
+> **¿Usas Coolify?** Coolify ya trae Traefik y chocaría con Caddy: no sigas esta
+> guía y usa **[DEPLOY_COOLIFY.md](DEPLOY_COOLIFY.md)** (deploy en Coolify + demo
+> sin dominio vía sslip.io).
+
 ## 1. Preparar el VPS
 
 Entra por SSH y actualiza el sistema:
