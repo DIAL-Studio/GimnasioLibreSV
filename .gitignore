@@ -1,0 +1,6 @@
+media/
+data/
+node_modules/
+dist/
+.harness/
+.DS_Store

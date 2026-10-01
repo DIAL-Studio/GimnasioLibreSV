@@ -1,7 +1,9 @@
 #!/usr/bin/env bash
 # Manually download the exercise images (JPG) and animations (GIF) into ./media.
 # You normally DON'T need this — `docker compose up` fetches them automatically.
-# Source: hasaneyldrm/exercises-dataset (CC).
+# The dataset's exercise data, code and instructions are MIT-licensed; its images and
+# animations are © Gym visual and require their own license for redistribution.
+# `media/` is gitignored and kept for local development only (see NOTICE.md).
 set -euo pipefail
 cd "$(dirname "$0")/.."
 tmp="$(mktemp -d)"
