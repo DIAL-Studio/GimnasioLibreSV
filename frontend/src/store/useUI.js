@@ -17,6 +17,39 @@ let workInt = null
 let workTick = null
 let workDone = null
 
+// The persisted mirror of the rest countdown (restStartedAt/restDuration in the app state).
+// `timer` itself is UI state; these two fields are what bring it back after a reload.
+export const restTimerFrom = (S, now = Date.now()) => {
+  const { restStartedAt: started, restDuration: dur } = S
+  if (started == null || dur == null) return null
+  const endsAt = started + dur * 1000
+  if (endsAt <= now) return null
+  return { left: Math.max(0, Math.round((endsAt - now) / 1000)), total: dur, endsAt }
+}
+
+// The tick behind a rest countdown, shared by startRest and rehydrateRest so a rest that
+// survived a reload runs exactly like one that just started. Resets any previous interval
+// first (React StrictMode mounts the rehydrate effect twice in dev).
+const runRestTick = (set, get) => {
+  if (timerInt) clearInterval(timerInt)
+  if (timerTick) document.removeEventListener('visibilitychange', timerTick)
+  timerTick = () => {
+    const tm = get().timer
+    if (!tm) return
+    const left = Math.max(0, Math.round((tm.endsAt - Date.now()) / 1000))
+    if (left === tm.left) return
+    const snd = useStore.getState().S.sound
+    if (left <= 0) {
+      beep(snd, 880, 0.15); beep(snd, 880, 0.15, 0.25); beep(snd, 1320, 0.4, 0.5)
+      vibrate([200, 100, 200]); get().toast(t('Rest over — next set!')); get().stopRest(); return
+    }
+    if (left <= 3) beep(snd, 660, 0.1)
+    set({ timer: { ...tm, left } })
+  }
+  timerInt = setInterval(timerTick, 1000)
+  document.addEventListener('visibilitychange', timerTick)
+}
+
 export const useUI = create((set, get) => ({
   sheets: [],          // { id, render:(close)=>JSX, kind:'sheet'|'center', locked }
   toastMsg: '',
@@ -40,24 +73,13 @@ export const useUI = create((set, get) => ({
 
   startRest(sec) {
     get().stopRest()
-    const endsAt = Date.now() + sec * 1000
-    set({ timer: { left: sec, total: sec, endsAt } })
+    const now = Date.now()
+    set({ timer: { left: sec, total: sec, endsAt: now + sec * 1000 } })
+    // Mirror the start into the persisted state (no server push — rest is device-local), so
+    // a refresh rebuilds the countdown from it instead of losing it. See rehydrateRest.
+    useStore.getState().update(s => { s.restStartedAt = now; s.restDuration = sec }, false)
     pushRestTimer(sec)
-    timerTick = () => {
-      const tm = get().timer
-      if (!tm) return
-      const left = Math.max(0, Math.round((tm.endsAt - Date.now()) / 1000))
-      if (left === tm.left) return
-      const snd = useStore.getState().S.sound
-      if (left <= 0) {
-        beep(snd, 880, 0.15); beep(snd, 880, 0.15, 0.25); beep(snd, 1320, 0.4, 0.5)
-        vibrate([200, 100, 200]); get().toast(t('Rest over — next set!')); get().stopRest(); return
-      }
-      if (left <= 3) beep(snd, 660, 0.1)
-      set({ timer: { ...tm, left } })
-    }
-    timerInt = setInterval(timerTick, 1000)
-    document.addEventListener('visibilitychange', timerTick)
+    runRestTick(set, get)
   },
   addRest(sec) {
     const tm = get().timer
@@ -66,14 +88,37 @@ export const useUI = create((set, get) => ({
     // taking off more than is left means "I'm ready now" — same as skipping, and it keeps a
     // negative duration out of both the progress bar and the server-side push schedule
     if (left <= 0) { get().stopRest(); return }
-    set({ timer: { ...tm, left, total: tm.total + sec, endsAt: tm.endsAt + sec * 1000 } })
+    const total = tm.total + sec
+    set({ timer: { ...tm, left, total, endsAt: tm.endsAt + sec * 1000 } })
+    useStore.getState().update(s => { s.restDuration = total }, false)
     pushRestTimer(left)
   },
   stopRest() {
     if (timerInt) clearInterval(timerInt); timerInt = null
     if (timerTick) document.removeEventListener('visibilitychange', timerTick); timerTick = null
     if (get().timer) cancelPushRestTimer()
+    // Clear the persisted mirror too. finish/discard also call stopRest, so a completed
+    // workout never leaves a rest behind for the next load to resume.
+    const st = useStore.getState()
+    if (get().timer || st.S.restStartedAt != null || st.S.restDuration != null) {
+      st.update(s => { s.restStartedAt = null; s.restDuration = null }, false)
+    }
     set({ timer: null })
+  },
+
+  // One-shot on app mount (see App.jsx): put back a rest that was still running when the app
+  // was closed, or drop stale fields when it has already ended meanwhile.
+  rehydrateRest() {
+    const S = useStore.getState().S
+    const tm = restTimerFrom(S)
+    if (!tm) {
+      if (S.restStartedAt != null || S.restDuration != null) {
+        useStore.getState().update(s => { s.restStartedAt = null; s.restDuration = null }, false)
+      }
+      return
+    }
+    set({ timer: tm })
+    runRestTick(set, get)
   },
 
   /* ---- work timer (issue #16) ----

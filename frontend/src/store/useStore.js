@@ -11,6 +11,7 @@ export const DEF = {
   theme: 'dark', accent: 'lime', body: 'male', targetW: null,
   bodyweight: [], routines: [], week: {}, dayPlan: {},
   exWeights: {}, workouts: [], active: null, customEx: [], gifSize: 'full',
+  restStartedAt: null, restDuration: null,
   // effort: which per-set effort scale is logged — 'none' | 'rir' | 'rpe'. null, not 'none', so
   // that a profile which never chose (loaded state is overlaid on DEF, on every path: local,
   // server pull, backup import) still falls back to the `showRir` boolean this replaced and
@@ -43,7 +44,9 @@ export const useStore = create((set, get) => {
   const persist = (S, push = true) => {
     S._ts = Date.now()
     registerCustom(S.customEx)
-    localStorage.setItem(KEY, JSON.stringify(S))
+    // Storage can refuse the write (quota full, private mode). Swallow the failure — the
+    // update still has to land in memory, or the mutation would be lost entirely.
+    try { localStorage.setItem(KEY, JSON.stringify(S)) } catch (e) { /* keep the in-memory copy */ }
     set({ S })
     if (MOBILE) nativePersist()
     if (push && get().user) {
@@ -68,6 +71,16 @@ export const useStore = create((set, get) => {
       pushTm = null
       get().pushState()
     }
+  })
+
+  // A refresh or accidental navigation mid-workout should ask first. Gated to recent
+  // sessions, so a stale `active` (left over from a crashed or abandoned session) cannot
+  // turn every reload into a nag.
+  document.addEventListener('beforeunload', e => {
+    const A = get().S.active
+    if (!A || !A.start || Date.now() - A.start > 12 * 60 * 60 * 1000) return
+    e.preventDefault()
+    e.returnValue = ''
   })
 
   // Everything a sign-out leaves behind on this device, whichever way it was triggered.
