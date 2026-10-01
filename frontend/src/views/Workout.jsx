@@ -12,8 +12,14 @@ import Media from '../components/Media.jsx'
 import { startFlow, exercisePicker, exConfigSheet, exerciseDetailSheet, topWeightSheet, finishWorkout, workoutCompleteSheet, confirmSheet } from '../sheets.jsx'
 import Icon from '../components/Icon.jsx'
 import { Button, Check, NumberField } from '../components/ui.jsx'
+import { LIMITS, clampField, clampInt, clampNum, limitsFor } from '../lib/validation.js'
 import { nextPrescription, applyPrescription } from '../lib/progression.js'
 import { glyphOf } from '../lib/glyphs.js'
+
+// Which validation limit each logged set field answers to. The RIR/RPE effort columns are
+// not listed: they walk their own scale through capEffort/stepEffort and must not be
+// floored like a rep count.
+const SET_LIMIT = { w: 'load', r: 'reps', min: 'min', speed: 'speed', sec: 'sec' }
 
 /* ---------- start chooser (no active workout) ---------- */
 function StartChooser() {
@@ -75,14 +81,16 @@ function ExerciseBlock({ entryIdx, compact, onToggle, onField, onAddSet, onRemov
   const cfg = { ...(entry.target || {}), id: entry.id }
   const bw = !cardio && isBw(cfg)
   const added = bw && entry.sets.some(s => s.w > 0)
-  const loadCol = { f: 'w', step: 2.5, dec: true, hd: bw ? t('Added ({0})', S.unit) : t('Weight ({0})', S.unit) }
+  // Every numeric cell carries its limits (issue #49), so neither a typed value nor a +/-
+  // tap can leave the range; the load ceiling follows the profile's unit.
+  const loadCol = { f: 'w', step: 2.5, dec: true, hd: bw ? t('Added ({0})', S.unit) : t('Weight ({0})', S.unit), ...limitsFor('load', { unit: S.unit }) }
   // The reps column is the total in every mode, unilateral included — the stepper walks in
   // twos there so the number you land on is one you can actually split evenly.
-  const repCol = { f: 'r', step: repStep(cfg), dec: false, hd: t('Reps') }
-  const col1 = cardio ? { f: 'min', step: 1, dec: false, hd: t('Duration (min)') }
-    : timed ? { f: 'sec', step: 5, dec: false, hd: t('Seconds') }
+  const repCol = { f: 'r', step: repStep(cfg), dec: false, hd: t('Reps'), ...limitsFor('reps') }
+  const col1 = cardio ? { f: 'min', step: 1, dec: false, hd: t('Duration (min)'), ...limitsFor('min') }
+    : timed ? { f: 'sec', step: 5, dec: false, hd: t('Seconds'), ...limitsFor('sec') }
       : (bw && !added) ? repCol : loadCol
-  const col2 = cardio ? { f: 'speed', step: 0.5, dec: true, hd: t('Speed (km/h)') }
+  const col2 = cardio ? { f: 'speed', step: 0.5, dec: true, hd: t('Speed (km/h)'), ...limitsFor('speed') }
     : timed ? ((bw && !added) ? null : loadCol)
       : (bw && !added) ? null : repCol
   // Effort (RIR or RPE, whichever the profile logs) only makes sense for weighted rep sets,
@@ -91,23 +99,30 @@ function ExerciseBlock({ entryIdx, compact, onToggle, onField, onAddSet, onRemov
   const kind = effortOf(S)
   const eff = EFFORT[kind]
   const col3 = mode === 'reps' && eff ? { ...eff, eff: kind, dec: true, opt: true, hd: t(eff.hd) } : null
-  // The effort column walks its own scale — see stepEffort. Weight and reps step up from 0
-  // with no ceiling, as they always did.
+  // The effort column walks its own scale — see stepEffort. Every other column steps to the
+  // nearest valid number under its own limits, so the tap lands on what the field would allow.
   const bump = (s, i, col, dir) => {
     if (col.eff) return onField(i, col.f, stepEffort(col.eff, s[col.f], dir))
-    onField(i, col.f, Math.max(0, Math.round(((s[col.f] || 0) + dir * col.step) * 100) / 100))
+    const raw = Math.round(((s[col.f] || 0) + dir * col.step) * 100) / 100
+    onField(i, col.f, col.int
+      ? clampInt(raw, { min: col.min, max: col.max })
+      : clampNum(raw, { min: col.min, max: col.max, dp: col.dp }))
   }
   // Uses the shared stepper markup so a set row picks up the same control styling
   // as every other +/- field in the app.
-  const cell = (s, i, col, cls) => (
-    <div className={'stp ' + cls}>
-      <button aria-label="Decrease" onClick={() => bump(s, i, col, -1)}><Icon name="minus" /></button>
-      {/* a typed effort is capped — there is no RPE 12, and 12 reps in reserve is a warm-up */}
-      <span className="val"><NumberField decimal={col.dec} nullable={col.opt} value={s[col.f] ?? ''}
-        onChange={v => onField(i, col.f, col.eff ? capEffort(col.eff, v) : v)} /></span>
-      <button aria-label="Increase" onClick={() => bump(s, i, col, 1)}><Icon name="plus" /></button>
-    </div>
-  )
+  const cell = (s, i, col, cls) => {
+    // The effort columns keep their own scale, so the field bounds don't apply to them.
+    const lim = col.eff ? {} : { min: col.min, max: col.max, int: col.int, dp: col.dp }
+    return (
+      <div className={'stp ' + cls}>
+        <button aria-label="Decrease" onClick={() => bump(s, i, col, -1)}><Icon name="minus" /></button>
+        {/* a typed effort is capped — there is no RPE 12, and 12 reps in reserve is a warm-up */}
+        <span className="val"><NumberField decimal={col.dec} nullable={col.opt} value={s[col.f] ?? ''} {...lim}
+          onChange={v => onField(i, col.f, col.eff ? capEffort(col.eff, v) : v)} /></span>
+        <button aria-label="Increase" onClick={() => bump(s, i, col, 1)}><Icon name="plus" /></button>
+      </div>
+    )
+  }
   return <>
     <Media ex={ex} key={entry.id} compact={compact} minimizable />
     <div className="row between" style={{ marginBottom: 6 }}>
@@ -145,7 +160,7 @@ function ExerciseBlock({ entryIdx, compact, onToggle, onField, onAddSet, onRemov
       <div style={{ height: 8 }} />
       <div className="row">
         <Button size="sm" icon="minus" disabled={entry.sets.length <= 1} onClick={onRemoveSet}>{t('Remove set')}</Button>
-        <Button size="sm" icon="plus" onClick={onAddSet}>{t('Add set')}</Button>
+        <Button size="sm" icon="plus" disabled={entry.sets.length >= LIMITS.sets.max} onClick={onAddSet}>{t('Add set')}</Button>
       </div>
     </div>
   </>
@@ -169,12 +184,18 @@ function ActiveWorkout() {
 
   const mutEntry = (idx, fn) => update(s => { fn(s.active.entries[idx]) }, true)
   // Clearing an optional field drops the key rather than storing null, so a set only carries
-  // what was actually logged — in the session, in history and in a backup.
+  // what was actually logged — in the session, in history and in a backup. Every typed
+  // number is clamped on the way in (issue #49), so a bad value cannot be stored even if it
+  // arrives from somewhere other than the input control.
   const setField = (idx, i, field, v) => mutEntry(idx, e => {
-    if (v == null) delete e.sets[i][field]; else e.sets[i][field] = v
+    if (v == null) { delete e.sets[i][field]; return }
+    const lim = SET_LIMIT[field]
+    e.sets[i][field] = lim ? clampField(lim, v, { unit: S.unit }) : v
   })
   const modeAt = idx => modeOf({ ...(A.entries[idx].target || {}), id: A.entries[idx].id })
   const addSet = idx => mutEntry(idx, e => {
+    // 20 sets of one exercise in a single session is the ceiling (lib/validation.js LIMITS.sets)
+    if (e.sets.length >= LIMITS.sets.max) return
     const l = e.sets[e.sets.length - 1]
     const m = modeOf({ ...(e.target || {}), id: e.id })
     if (m === 'cardio') e.sets.push({ min: l ? l.min : (e.target.min || 20), speed: l ? l.speed : (e.target.speed || 8), done: false })

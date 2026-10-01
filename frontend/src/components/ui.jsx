@@ -15,6 +15,7 @@
 
 import { useRef, useState, useEffect, useCallback, forwardRef } from 'react'
 import Icon from './Icon.jsx'
+import { clampNum, clampInt, toNumber } from '../lib/validation.js'
 
 /* ============================ text ============================ */
 
@@ -23,19 +24,64 @@ import Icon from './Icon.jsx'
 // 0). Keeps a local string draft while focused so partial input like "33," survives.
 // `nullable` is for fields where "nothing entered" and 0 mean different things (RIR: a
 // logged 0 is a set taken to failure). Those clear back to null instead of snapping to 0.
-export function NumberField({ value, onChange, decimal = true, nullable = false, className = '', ...rest }) {
+//
+// `min`/`max`/`int`/`dp` bound the field via lib/validation.js. While typing only the
+// ceiling is enforced — clamping up on the first keystroke of "10" would turn the "1" into
+// the floor and fight the keyboard (the rule capEffort set). The floor lands on blur, so a
+// typed "-5" snaps to the field's minimum instead of being read as positive, and a cleared
+// reps/sets/min/sec field re-commits to its last valid value or its floor — never 0.
+export function NumberField({ value, onChange, decimal = true, nullable = false, min = 0, max, int = false, dp, className = '', ...rest }) {
   const [draft, setDraft] = useState(null)
   const committed = useRef(null)
+  const isInt = int || decimal === false
   // null and undefined are the same "empty" here — a nullable field's key is dropped once cleared.
   if (draft !== null && (committed.current ?? null) !== (value ?? null)) { setDraft(null); committed.current = null }
+  // what the field should hold once it settles: the full bounds, with the last valid
+  // value (or the floor) standing in for anything unusable
+  const settle = n => isInt
+    ? clampInt(n, { min, max })
+    : clampNum(n, { min, max, dp })
+  // while typing, cap the ceiling and round the step — but never floor
+  const cap = n => isInt
+    ? clampInt(n, { max })
+    : clampNum(n, { max, dp })
+  const lastValid = () => committed.current ?? toNumber(value) ?? min ?? 0
   const commit = raw => {
-    let s = raw.replace(/,/g, '.').replace(/[^0-9.]/g, '')
+    // keep a single leading minus and dot, so "-5" and "-.5" can be read as negative at all
+    let s = String(raw).replace(/,/g, '.').replace(/[^0-9.-]/g, '')
+    s = s.startsWith('-') ? '-' + s.slice(1).replace(/-/g, '') : s.replace(/-/g, '')
     const i = s.indexOf('.')
-    if (i !== -1) s = decimal ? s.slice(0, i + 1) + s.slice(i + 1).replace(/\./g, '') : s.slice(0, i)
-    const n = s === '' || s === '.' ? (nullable ? null : 0) : Math.max(0, parseFloat(s))
-    committed.current = n
+    if (i !== -1) s = s.slice(0, i + 1) + s.slice(i + 1).replace(/\./g, '')
+    const n = toNumber(s)
+    if (n === null) {
+      // a lone sign or dot is a number still being typed, not an emptied field
+      if (!nullable && (s === '-' || s === '-.')) { setDraft(s); return }
+      if (nullable) { committed.current = null; setDraft(s); onChange(null); return }
+      // blank or unusable: re-commit the last valid value, or the field minimum — not 0
+      const f = settle(lastValid())
+      committed.current = f
+      setDraft(null)
+      onChange(f)
+      return
+    }
+    const v = cap(n)
+    committed.current = v
     setDraft(s)
-    onChange(n)
+    onChange(v)
+  }
+  const onBlur = () => {
+    if (draft !== null) {
+      const n = toNumber(draft)
+      if (n !== null) {
+        const f = settle(n)
+        if (f !== committed.current) { committed.current = f; onChange(f) }
+      } else if (!nullable) {
+        const f = settle(lastValid())
+        if (f !== committed.current) { committed.current = f; onChange(f) }
+      }
+    }
+    setDraft(null)
+    committed.current = null
   }
   return (
     <input
@@ -45,7 +91,7 @@ export function NumberField({ value, onChange, decimal = true, nullable = false,
       value={draft ?? (value ?? '')}
       onFocus={e => e.target.select()}
       onChange={e => commit(e.target.value)}
-      onBlur={() => { setDraft(null); committed.current = null }}
+      onBlur={onBlur}
       {...rest}
     />
   )
@@ -115,13 +161,18 @@ export function Segmented({ options, value, onChange, className = '' }) {
 
 /* ============================ stepper ============================ */
 
-export function Stepper({ value, step = 1, onChange, decimal = true, className = '', label, unit }) {
-  const set = v => onChange(Math.max(0, Math.round((v || 0) * 100) / 100))
+// One tap of +/- resolves against the same limits the field enforces, so the buttons can
+// never walk the value past a bound the number itself would be clamped to.
+export function Stepper({ value, step = 1, onChange, decimal = true, className = '', label, unit, min = 0, max, int = false, dp }) {
+  const isInt = int || decimal === false
+  const set = v => onChange(isInt
+    ? clampInt(v, { min, max, fallback: min })
+    : clampNum(v, { min, max, dp, fallback: min }))
   const inner = (
     <div className={'stp ' + className}>
       <button onClick={() => set((+value || 0) - step)} aria-label="Decrease"><Icon name="minus" /></button>
       <span className="val">
-        <NumberField value={value} decimal={decimal} onChange={onChange} />
+        <NumberField value={value} decimal={decimal} min={min} max={max} int={isInt} dp={dp} onChange={onChange} />
         {unit && <i>{unit}</i>}
       </span>
       <button onClick={() => set((+value || 0) + step)} aria-label="Increase"><Icon name="plus" /></button>
