@@ -2,7 +2,9 @@ name: opengym
 
 services:
   # One-time: download the exercise images + GIFs into ./media (skipped if already there).
-  # ~140 MB, from github.com/hasaneyldrm/exercises-dataset (CC).
+  # ~140 MB, from github.com/hasaneyldrm/exercises-dataset. The dataset's code and
+  # instructions are MIT-licensed, but its images/animations are © Gym visual and require
+  # their own license for redistribution — see NOTICE.md and scripts/fetch-media.sh.
   media:
     image: alpine/git
     volumes:
@@ -22,9 +24,8 @@ services:
     restart: "no"
 
   # Passkey auth + per-user data (Node, no framework).
-  # image: prebuilt (docker compose pull). build: from source (docker compose up --build).
+  # Built from source (api/Dockerfile) — this fork is not published on ghcr.io.
   api:
-    image: ghcr.io/duartesantos8/opengym-api:latest
     build: ./api
     restart: unless-stopped
     env_file: .env
@@ -33,20 +34,25 @@ services:
       - DATA_DIR=/data
     volumes:
       - ./data:/data         # users, passkeys, per-user state, session secret — BACK THIS UP
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000/api/health').then(r => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
 
-  # Builds the React frontend (multi-stage) and serves it, proxying /api → api
+  # Builds the React frontend (multi-stage, root Dockerfile) and serves it, proxying /api → api
   # and the exercise media from the shared volume. Single origin for passkeys.
   web:
-    image: ghcr.io/duartesantos8/opengym-web:latest
     build:
       context: .
-      dockerfile: web/Dockerfile
+      dockerfile: Dockerfile
     restart: unless-stopped
     depends_on:
       media:
         condition: service_completed_successfully
       api:
-        condition: service_started
+        condition: service_healthy
     ports:
       - "${WEB_PORT:-8080}:80"
     volumes:
