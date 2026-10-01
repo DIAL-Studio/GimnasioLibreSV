@@ -13,7 +13,7 @@ export const LANGS = {
 }
 export const INSTR_LANGS = ['en', 'es', 'fr', 'it', 'tr', 'ru', 'zh', 'hi', 'pl', 'ko']
 const DATE_LOCALES = {
-  en: 'en-GB', de: 'de-DE', es: 'es-ES', fr: 'fr-FR', it: 'it-IT', pt: 'pt-PT',
+  en: 'en-GB', de: 'de-DE', es: 'es-419', fr: 'fr-FR', it: 'it-IT', pt: 'pt-PT',
   pl: 'pl-PL', tr: 'tr-TR', ru: 'ru-RU', zh: 'zh-CN', ko: 'ko-KR', hi: 'hi-IN'
 }
 
@@ -29,6 +29,19 @@ const notify = () => { version++; subs.forEach(f => f()) }
 
 export const getLang = () => lang
 export const dateLocale = () => DATE_LOCALES[lang] || 'en-GB'
+
+// First-run default: match the browser's preference list against LANGS (es-SV → es, taking the
+// primary subtag). An unsupported language falls back to Spanish — the launch market — not
+// English. No navigator at all (SSR/tests) is Spanish too.
+export function detectLang() {
+  if (typeof navigator === 'undefined') return 'es'
+  const list = (navigator.languages && navigator.languages.length) ? navigator.languages : [navigator.language]
+  for (const tag of list) {
+    const primary = String(tag || '').toLowerCase().split('-')[0]
+    if (LANGS[primary]) return primary
+  }
+  return 'es'
+}
 
 // Translate a source string; {0},{1}… are replaced with args (also on the English fallback).
 export function t(s, ...args) {

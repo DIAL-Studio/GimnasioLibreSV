@@ -7,7 +7,7 @@ import { effortOf } from '../lib/history.js'
 import { api, webauthnOK, passkeyLogin, passkeyRegister, addPasskey, IS_ANDROID } from '../lib/api.js'
 import { pushSupported, enablePush, disablePush, sendTestPush } from '../lib/push.js'
 import { wakeLockSupported } from '../lib/wakelock.js'
-import { t, LANGS, INSTR_LANGS } from '../lib/i18n.js'
+import { t, LANGS, INSTR_LANGS, detectLang } from '../lib/i18n.js'
 import { DEMO, REPO } from '../lib/demo.js'
 import { MOBILE, shareExport, syncReminder } from '../lib/mobile.js'
 import { buildHealthCsv } from '../lib/health-export.js'
@@ -124,7 +124,7 @@ export default function Settings() {
     <Section title={t('General')} footer={t('Note: switching units only changes the label — logged numbers are not converted.')}>
       <SelectRow
         icon="globe" iconTint="var(--blue)" title={t('Language')}
-        value={S.lang || 'en'} onChange={v => update(s => { s.lang = v })}
+        value={S.lang || detectLang()} onChange={v => update(s => { s.lang = v })}
         options={Object.entries(LANGS).map(([k, name]) => ({
           value: k, label: name,
           subtitle: INSTR_LANGS.includes(k) ? null : t("Exercise instructions aren't available in this language yet — they stay in English."),
