@@ -255,6 +255,10 @@ export default {
   // --- settings ---
   'Account': 'Konto',
   'Signed in with passkey — data syncs to this profile.': 'Mit Passkey angemeldet — Daten werden mit diesem Profil synchronisiert.',
+  'Add another passkey': 'Weiteren Passkey hinzufügen',
+  'Add this device as another way to sign in to this profile.': 'Füge dieses Gerät als weitere Anmeldemöglichkeit für dieses Profil hinzu.',
+  'Passkey added': 'Passkey hinzugefügt',
+  'Could not add passkey': 'Passkey konnte nicht hinzugefügt werden',
   'Sign out?': 'Abmelden?',
   'Your data is synced to your profile first, then cleared from this device.': 'Deine Daten werden erst mit dem Profil synchronisiert, dann von diesem Gerät entfernt.',
   'Sign out': 'Abmelden',

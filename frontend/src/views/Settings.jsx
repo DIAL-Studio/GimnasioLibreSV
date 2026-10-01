@@ -4,7 +4,7 @@ import { useStore, DEF, hasData } from '../store/useStore.js'
 import { useUI } from '../store/useUI.js'
 import { ACCENTS, todayISO, localTZ } from '../lib/format.js'
 import { effortOf } from '../lib/history.js'
-import { api, webauthnOK, passkeyLogin, passkeyRegister, IS_ANDROID } from '../lib/api.js'
+import { api, webauthnOK, passkeyLogin, passkeyRegister, addPasskey, IS_ANDROID } from '../lib/api.js'
 import { pushSupported, enablePush, disablePush, sendTestPush } from '../lib/push.js'
 import { wakeLockSupported } from '../lib/wakelock.js'
 import { t, LANGS, INSTR_LANGS } from '../lib/i18n.js'
@@ -68,6 +68,12 @@ export default function Settings() {
     catch (e) { if (e.name !== 'NotAllowedError' && e.name !== 'AbortError') toast(e.message || t('Sign-in failed')) }
   }
   const registerHere = () => useUI.getState().openSheet(close => <RegisterInline close={close} setUser={setUser} pushState={pushState} pullState={pullState} toast={toast} />)
+  // Registers one more passkey for the signed-in profile (another device or a security key).
+  // Cancelling the system prompt stays silent, same as the sign-in/register flows.
+  const addAnotherPasskey = async () => {
+    try { await addPasskey(); toast(t('Passkey added')) }
+    catch (e) { if (e.name !== 'NotAllowedError' && e.name !== 'AbortError') toast(e.message || t('Could not add passkey')) }
+  }
   // Ends the profile's sessions on every device — this one included, so on success it lands in
   // the same place as the plain sign-out above (home, local data cleared). On failure nothing
   // local is touched: still signed in here, and say so rather than leaving a half-signed-out app.
@@ -101,6 +107,7 @@ export default function Settings() {
           onClick={() => window.open(REPO, '_blank', 'noopener')} />
       </> : user ? <>
         <Row icon="personCircle" iconTint="var(--grey)" title={user.name} subtitle={t('Signed in with passkey — data syncs to this profile.')} />
+        <Row icon="key" iconTint="var(--blue)" title={t('Add another passkey')} subtitle={t('Add this device as another way to sign in to this profile.')} accessory="chevron" onClick={addAnotherPasskey} />
         {user.admin && <Row icon="wrench" iconTint="var(--indigo)" title={t('Admin dashboard')} accessory="chevron" onClick={() => nav('/admin')} />}
         <Row icon="signOut" iconTint="var(--red)" title={t('Sign out')} danger onClick={() => confirmSheet({ title: t('Sign out?'), message: t('Your data is synced to your profile first, then cleared from this device.'), confirmText: t('Sign out'), danger: true, onConfirm: () => { signOut(); nav('/home') } })} />
         <Row icon="shield" iconTint="var(--red)" title={t('Sign out everywhere')} subtitle={t('Ends this profile’s sessions on all your devices.')} danger onClick={signOutEverywhere} />

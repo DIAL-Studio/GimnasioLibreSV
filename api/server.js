@@ -40,6 +40,21 @@ let db = { users: [], creds: [], subs: [], invites: [] };
 try { db = JSON.parse(fs.readFileSync(dbFile, 'utf8')); } catch {}
 db.subs = db.subs || [];
 db.invites = db.invites || [];
+// Multi-identity user model (sign in with a passkey, and later email or Google; several
+// passkeys per account). On top of the original { id, name, created, sv?, disabled?, admin?,
+// invitedBy? }, a db.users entry may carry these fields — all optional, written only once they
+// exist, ignored until then:
+//   email, emailVerifiedAt  verified email address + when it was confirmed
+//   googleSub               stable Google account id ('sub' claim)
+//   identities              [{ type: 'passkey', id: credId, addedAt }] — one per sign-in method
+// Passkeys themselves stay in db.creds keyed by userId; identities is bookkeeping on top so the
+// account UI can list/add/remove sign-in methods without touching the auth tables.
+function recordIdentity(user, identity) {
+  if (!Array.isArray(user.identities)) user.identities = [];
+  const existing = user.identities.find(i => i.type === identity.type && i.id === identity.id);
+  if (existing) Object.assign(existing, identity);
+  else user.identities.push(identity);
+}
 const isAdmin = user => !!user && (user.admin === true || ADMIN_UIDS.includes(user.id));
 function saveDb() { atomicWrite(dbFile, JSON.stringify(db, null, 2)); }
 function atomicWrite(file, content) {
@@ -279,14 +294,16 @@ const routes = {
       authenticatorSelection: { residentKey: 'required', userVerification: 'preferred' },
       excludeCredentials: []
     });
-    const cid = putChallenge({ challenge: options.challenge, name, uid, code });
+    const cid = putChallenge({ challenge: options.challenge, name, uid, code, kind: 'register' });
     json(res, 200, { cid, options });
   },
 
   'POST /api/register/verify': async (req, res) => {
     const body = await readBody(req);
     const c = takeChallenge(body.cid);
-    if (!c || !c.uid) return json(res, 400, { error: 'challenge expired — try again' });
+    // `kind` keeps a challenge minted elsewhere (e.g. for adding a passkey to an existing
+    // account) from being spent here, where it would create a duplicate user for that uid.
+    if (!c || c.kind !== 'register') return json(res, 400, { error: 'challenge expired — try again' });
     let verification;
     try {
       verification = await verifyRegistrationResponse({
@@ -315,22 +332,76 @@ const routes = {
       counter: credential.counter || 0,
       transports: body.credential?.response?.transports || []
     });
+    recordIdentity(user, { type: 'passkey', id: credential.id, addedAt: user.created });
     saveDb();
     json(res, 200, { user: { id: user.id, name: user.name, admin: isAdmin(user) } }, { 'Set-Cookie': sessionCookie(user) });
+  },
+
+  // Add another passkey to the account you are ALREADY signed in as. Registration always mints
+  // a new user, so this is the only way a second device (or a security key) can join an existing
+  // profile. Same challenge store and verification as registration; no user is created here.
+  'POST /api/passkey/add/options': async (req, res) => {
+    const user = readSession(req);
+    if (!user) return json(res, 401, { error: 'not signed in' });
+    const options = await generateRegistrationOptions({
+      rpName: RP_NAME, rpID: RP_ID,
+      userID: Buffer.from(user.id), userName: user.name, userDisplayName: user.name,
+      attestationType: 'none',
+      authenticatorSelection: { residentKey: 'required', userVerification: 'preferred' },
+      // The browser refuses a create() whose selected authenticator is already in
+      // excludeCredentials — which is exactly "this passkey is already on this profile".
+      excludeCredentials: db.creds.filter(c => c.userId === user.id)
+        .map(c => ({ id: c.id, transports: c.transports || [] }))
+    });
+    const cid = putChallenge({ challenge: options.challenge, uid: user.id, kind: 'add' });
+    json(res, 200, { cid, options });
+  },
+
+  'POST /api/passkey/add/verify': async (req, res) => {
+    const user = readSession(req);
+    if (!user) return json(res, 401, { error: 'not signed in' });
+    const body = await readBody(req);
+    const c = takeChallenge(body.cid);
+    if (!c || c.kind !== 'add') return json(res, 400, { error: 'challenge expired — try again' });
+    if (c.uid !== user.id) return json(res, 403, { error: 'this challenge was issued for a different account' });
+    let verification;
+    try {
+      verification = await verifyRegistrationResponse({
+        response: body.credential,
+        expectedChallenge: c.challenge,
+        expectedOrigin: ORIGIN,
+        expectedRPID: RP_ID,
+        requireUserVerification: false
+      });
+    } catch (e) { return json(res, 400, { error: 'verification failed: ' + e.message }); }
+    if (!verification.verified) return json(res, 400, { error: 'not verified' });
+    const { credential } = verification.registrationInfo;
+    if (db.creds.find(x => x.id === credential.id)) return json(res, 409, { error: 'credential already registered' });
+    const addedAt = new Date().toISOString();
+    const cred = {
+      id: credential.id, userId: user.id,
+      publicKey: Buffer.from(credential.publicKey).toString('base64url'),
+      counter: credential.counter || 0,
+      transports: body.credential?.response?.transports || []
+    };
+    db.creds.push(cred);
+    recordIdentity(user, { type: 'passkey', id: cred.id, addedAt });
+    saveDb();
+    json(res, 200, { ok: true, passkey: { id: cred.id, addedAt } });
   },
 
   'POST /api/login/options': async (req, res) => {
     const options = await generateAuthenticationOptions({
       rpID: RP_ID, userVerification: 'preferred', allowCredentials: []
     });
-    const cid = putChallenge({ challenge: options.challenge });
+    const cid = putChallenge({ challenge: options.challenge, kind: 'login' });
     json(res, 200, { cid, options });
   },
 
   'POST /api/login/verify': async (req, res) => {
     const body = await readBody(req);
     const c = takeChallenge(body.cid);
-    if (!c) return json(res, 400, { error: 'challenge expired — try again' });
+    if (!c || c.kind !== 'login') return json(res, 400, { error: 'challenge expired — try again' });
     const cred = db.creds.find(x => x.id === body.credential?.id);
     if (!cred) return json(res, 404, { error: 'unknown passkey — create a profile first' });
     let verification;

@@ -51,6 +51,13 @@ export async function passkeyRegister(name, code) {
   const res = await api('/api/register/verify', { method: 'POST', body: JSON.stringify({ cid, credential: credToJSON(cred) }) })
   return res.user
 }
+// Adds a passkey to the account that is already signed in (a second device or a security key).
+// passkeyRegister can't be reused for this — it always mints a new profile server-side.
+export async function addPasskey() {
+  const { cid, options } = await api('/api/passkey/add/options', { method: 'POST', body: '{}' })
+  const cred = await navigator.credentials.create({ publicKey: toCreationOptions(options) })
+  return api('/api/passkey/add/verify', { method: 'POST', body: JSON.stringify({ cid, credential: credToJSON(cred) }) })
+}
 export async function passkeyLogin() {
   const { cid, options } = await api('/api/login/options', { method: 'POST', body: '{}' })
   const cred = await navigator.credentials.get({ publicKey: toRequestOptions(options) })
