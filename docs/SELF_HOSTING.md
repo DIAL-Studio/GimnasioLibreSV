@@ -85,6 +85,9 @@ Visit `https://gym.example.com`, create your profile, and add it to your home sc
 > Changing `RP_ID` later invalidates existing passkeys (they were bound to the old hostname).
 > Pick your domain before people register.
 
+**See also:** [DEPLOY_VPS.md](DEPLOY_VPS.md) — a step-by-step walkthrough for a fresh VPS
+(Hostinger/Ubuntu): first SSH login to HTTPS, multiple gyms and backups. Written in Spanish.
+
 ## 4. Multiple users
 
 Anyone who can reach the URL can create their own profile — each gets isolated data. That's the

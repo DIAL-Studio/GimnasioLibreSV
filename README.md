@@ -101,6 +101,7 @@ Node locally. This fork is not published to `ghcr.io`: always build (`--build`) 
 
 > Want it reachable from your phone over the internet with passkeys? You'll need an HTTPS
 > domain — a two-line change in `.env`. See **[docs/SELF_HOSTING.md](docs/SELF_HOSTING.md)**.
+> Deploying on a VPS? See **[docs/DEPLOY_VPS.md](docs/DEPLOY_VPS.md)** (step-by-step, in Spanish).
 
 ## Mobile app (no server at all)
 

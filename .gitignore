@@ -4,3 +4,6 @@ node_modules/
 dist/
 .harness/
 .DS_Store
+
+# env files — commit .env.example, never a real .env
+.env
