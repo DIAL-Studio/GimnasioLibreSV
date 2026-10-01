@@ -10,6 +10,7 @@ import { wakeLockSupported } from '../lib/wakelock.js'
 import { t, LANGS, INSTR_LANGS } from '../lib/i18n.js'
 import { DEMO, REPO } from '../lib/demo.js'
 import { MOBILE, shareExport, syncReminder } from '../lib/mobile.js'
+import { buildHealthCsv } from '../lib/health-export.js'
 import { starterPlanSheet, confirmSheet, importFromApp } from '../sheets.jsx'
 import Icon from '../components/Icon.jsx'
 import { Section, Row, SelectRow, Switch, Segmented, Button, TextField } from '../components/ui.jsx'
@@ -35,6 +36,20 @@ export default function Settings() {
     const blob = new Blob([json], { type: 'application/json' })
     const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = name; a.click(); URL.revokeObjectURL(a.href)
     toast(t('Backup exported'))
+  }
+  // Same share-sheet / download flow as the backup above — different payload. The CSV is
+  // session-level only (see lib/health-export.js); docs/HEALTH_SYNC.md explains the two
+  // bridges this file feeds.
+  const doHealthExport = async () => {
+    const csv = buildHealthCsv(S)
+    const name = 'gimnasiolibresv-health-' + todayISO() + '.csv'
+    if (MOBILE) {
+      try { await shareExport(csv, name); toast(t('Health data exported')) } catch (e) { /* share sheet dismissed */ }
+      return
+    }
+    const blob = new Blob([csv], { type: 'text/csv' })
+    const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = name; a.click(); URL.revokeObjectURL(a.href)
+    toast(t('Health data exported'))
   }
   const doImport = ev => {
     const f = ev.target.files[0]; if (!f) return
@@ -180,6 +195,7 @@ export default function Settings() {
         accessory="chevron" onClick={() => importRef.current.click()} />
       <Row icon="upload" iconTint="var(--blue)" title={t('Import backup')} accessory="chevron" onClick={() => fileRef.current.click()} />
       <Row icon="download" iconTint="var(--blue)" title={t('Export backup (JSON)')} accessory="chevron" onClick={doExport} />
+      <Row icon="heart" iconTint="var(--red)" title={t('Export for health apps')} accessory="chevron" onClick={doHealthExport} />
       <Row icon="trash" iconTint="var(--red)" title={t('Reset everything')} danger onClick={() => confirmSheet({ title: t('Reset everything?'), message: t('Deletes your plan, workouts and body weight on this device. This cannot be undone.'), confirmText: t('Delete everything'), danger: true, onConfirm: () => { replaceState(JSON.parse(JSON.stringify(DEF)), true); nav('/home'); toast(t('All data reset')) } })} />
     </Section>
     <input ref={fileRef} type="file" accept=".json,application/json" style={{ display: 'none' }} onChange={doImport} />
